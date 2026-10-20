@@ -1,0 +1,170 @@
+name: Build LUNAR APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Create Minimal Android Project Structure
+      run: |
+        mkdir -p app/src/main/java/com/lunar/musicplayer
+        mkdir -p app/src/main/res/values
+        mkdir -p app/src/main/res/drawable
+
+        # AndroidManifest.xml
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+            package="com.lunar.musicplayer">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <application
+                android:allowBackup="true"
+                android:icon="@mipmap/ic_launcher"
+                android:label="LUNAR"
+                android:theme="@android:style/Theme.Material.NoActionBar">
+                <activity
+                    android:name=".MainActivity"
+                    android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        EOF
+
+        # build.gradle (Project)
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.1.0'
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        task clean(type: Delete) {
+            delete rootProject.buildDir
+        }
+        EOF
+
+        # settings.gradle
+        cat << 'EOF' > settings.gradle
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "LUNAR"
+        include ':app'
+        EOF
+
+        # build.gradle (App) - يدعم 32 و 64 بت
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+        }
+        android {
+            namespace 'com.lunar.musicplayer'
+            compileSdk 34
+
+            defaultConfig {
+                applicationId "com.lunar.musicplayer"
+                minSdk 24
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+                
+                ndk {
+                    abiFilters 'armeabi-v7a', 'arm64-v8a'
+                }
+            }
+
+            buildTypes {
+                release {
+                    minifyEnabled false
+                }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+        }
+        dependencies {
+            implementation 'androidx.core:core-ktx:1.12.0'
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+            implementation 'com.google.android.material:material:1.11.0'
+        }
+        EOF
+
+        # MainActivity.kt بسيط وبدون أخطاء
+        cat << 'EOF' > app/src/main/java/com/lunar/musicplayer/MainActivity.kt
+        package com.lunar.musicplayer
+
+        import android.os.Bundle
+        import android.widget.TextView
+        import androidx.appcompat.app.AppCompatActivity
+
+        class MainActivity : AppCompatActivity() {
+            override fun onCreate(savedInstanceState: Bundle?) {
+                super.onCreate(savedInstanceState)
+                val text = TextView(this)
+                text.text = "LUNAR Music Player - Initializing..."
+                text.textSize = 20f
+                setContentView(text)
+            }
+        }
+        EOF
+
+        # Strings.xml
+        cat << 'EOF' > app/src/main/res/values/strings.xml
+        <resources>
+            <string name="app_name">LUNAR</string>
+        </resources>
+        EOF
+
+    - name: Make Gradle Executable
+      run: chmod +x gradlew || gradle wrapper
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LUNAR.apk
+        path: app/build/outputs/apk/debug/app-debug.apk
+     
